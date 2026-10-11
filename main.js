@@ -1,10 +1,61 @@
 const api = "https://api.open-meteo.com/v1/forecast";
-console.log("API URL fucking working");
 const searchBar = document.getElementById("search-bar");
-const button = document.getElementById("search-button");
+const searchButton = document.getElementById("search-button");
+const toggleButton = document.getElementById("toggle-button");
+const statusElement = document.getElementById("status");
+const locationButton = document.getElementById("location-button");
+const resultsElement = document.getElementById("results");
+let temperature = 0;
+let isCelsius = true;
+let savedCity = "lastCity";
+let dailyData = null;
+
+function saveLastCity(city) {
+  try {
+    localStorage.setItem(savedCity, city);
+  } catch (error) {
+    console.error("Could not save city:", error);
+  }
+}
+
+function loadLastCity() {
+  try {
+    return localStorage.getItem(savedCity);
+  } catch (error) {
+    return null;
+  }
+}
+
+function renderState(state, message = "") {
+  if (state === "success") {
+    resultsElement.hidden = false;
+    statusElement.textContent = "";
+  } else {
+    resultsElement.hidden = true;
+    statusElement.textContent = message;
+  }
+
+  const isLoading = state === "loading";
+  searchButton.disabled = isLoading;
+  locationButton.disabled = isLoading;
+}
+
+function inIt() {
+  const lastCity = loadLastCity();
+
+  if (lastCity) {
+    searchBar.value = lastCity;
+    search(lastCity);
+  } else {
+    renderState("idle", "Search a city to get started");
+  }
+}
 
 async function geocodeCity(cityName) {
-  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(cityName)}&count=1&language=en&format=json`;
+  const url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(
+    cityName,
+  )}&count=1&language=en&format=json`;
+
   const response = await fetch(url);
   const data = await response.json();
 
@@ -12,60 +63,164 @@ async function geocodeCity(cityName) {
     const { latitude, longitude } = data.results[0];
     return { latitude, longitude };
   }
+
   throw new Error("City not found");
 }
 
+async function fetchWeatherMyLocation(latitude, longitude) {
+  const response = await fetch(
+    `${api}?latitude=${latitude}&longitude=${longitude}&current=temperature_2m,weather_code,wind_speed_10m,relative_humidity_2m&daily=temperature_2m_max,temperature_2m_min,weather_code&timezone=auto`,
+  );
+
+  const data = await response.json();
+
+  temperature = data.current.temperature_2m;
+  const weatherCode = data.current.weather_code;
+  const weatherDescription = weatherDescriptions[weatherCode] ?? "Unknown";
+  const windSpeed = data.current.wind_speed_10m;
+  const humidity = data.current.relative_humidity_2m;
+
+  renderTemperature();
+  dailyData = data.daily;
+  renderForecast();
+
+  document.getElementById("weather-conditions").textContent =
+    `Weather Conditions: ${weatherDescription}`;
+
+  document.getElementById("wind-speed").textContent =
+    `Wind Speed: ${windSpeed} km/h`;
+
+  document.getElementById("humidity").textContent = `Humidity: ${humidity} %`;
+
+  document.getElementById("date").textContent = new Date().toLocaleDateString();
+}
+
+async function fetchWeatherData(cityName) {
+  const coordinates = await geocodeCity(cityName);
+  const { latitude, longitude } = coordinates;
+  await fetchWeatherMyLocation(latitude, longitude);
+
+  document.getElementById("city-name").textContent = cityName;
+  saveLastCity(cityName);
+}
+
+async function search(cityName) {
+  if (searchButton.disabled) return;
+
+  const cleanSearch = cityName.trim();
+  if (cleanSearch === "") return;
+
+  renderState("loading", "Loading…");
+  try {
+    await fetchWeatherData(cleanSearch);
+    renderState("success");
+  } catch (error) {
+    console.log(error.message);
+    if (error.message === "City not found") {
+      renderState("error", "City not found. Check the spelling and try again.");
+    } else {
+      renderState("error", "Something went wrong. Please try again.");
+    }
+  }
+}
+
+searchButton.addEventListener("click", () => {
+  search(searchBar.value);
+});
+
 searchBar.addEventListener("keydown", (e) => {
   if (e.key === "Enter") {
-    const cityName = searchBar.value;
-    geocodeCity(cityName);
-    const { latitude, longitude } = coordinates;
-    console.log(coordinates);
-    console.log(coordinates.latitude.Date);
+    search(searchBar.value);
   }
 });
-//hena function ll geocode el city w fetch l data mn el api
-button.addEventListener("click", function () {
-  //5ale balk an awel 7aga hena betahsal hea el fetchh we 7ass feh 7aga naqsaa
-  fetch(
-    `https://api.open-meteo.com/v1/forecast?latitude=35.6895&longitude=139.6917&hourly=temperature_2m,weathercode`,
-  )
-    .then((response) => {
-      console.log(response);
-      return response.json();
-    })
-    // ta7welat 3ady
-    .then((data) => {
-      console.log(data);
 
-      let temperature = data.hourly.temperature_2m[0];
-      console.log(data.hourly.temperature_2m[0]);
+locationButton.addEventListener("click", () => {
+  if (locationButton.disabled) return;
 
-      let description = data.hourly.weathercode[0];
-      console.log(data.hourly);
+  async function success(position) {
+    const { latitude, longitude } = position.coords;
+    try {
+      await fetchWeatherMyLocation(latitude, longitude);
+      document.getElementById("city-name").textContent = "Your location";
+      renderState("success");
+    } catch (err) {
+      console.log(err.message);
+      renderState("error", "Something went wrong. Please try again.");
+    }
+  }
 
-      let weatherElement = document.getElementById("weather");
-      console.log(data.hourly.weathercode[0]);
-      console.log("weather element fetched");
+  function error(err) {
+    console.log(err.message);
+    renderState(
+      "error",
+      "Location access denied. Please search for a city instead.",
+    );
+  }
 
-      let cityElement = document.getElementById("city-name");
-      console.log("city element fetched");
-
-      let dateElement = document.getElementById("date");
-      console.log("date element fetched");
-
-      document.getElementById("temperature").textContent =
-        `Temperature: ${temperature} °C`;
-
-      document.getElementById("weather").textContent =
-        `Weather: ${description}`;
-
-      document.getElementById("city-name").textContent = "Tokyo, Japan";
-
-      document.getElementById("date").textContent =
-        new Date().toLocaleDateString();
-    })
-    .catch((error) => {
-      console.error("Error fetching weather data:", error);
-    });
+  renderState("loading", "Loading…");
+  navigator.geolocation.getCurrentPosition(success, error);
 });
+
+function celsiusChange(celsius) {
+  return ((celsius * 9) / 5 + 32).toFixed(2);
+}
+
+function renderTemperature() {
+  if (isCelsius) {
+    document.getElementById("temperature").textContent =
+      `Temperature: ${temperature} °C`;
+  } else {
+    document.getElementById("temperature").textContent =
+      `Temperature: ${celsiusChange(temperature)} °F`;
+  }
+}
+
+function renderForecast() {
+  const forecastEl = document.getElementById("forecast");
+  forecastEl.innerHTML = "";
+
+  if (!dailyData) return;
+
+  for (let i = 1; i <= 5; i++) {
+    const dayName = new Date(dailyData.time[i] + "T00:00").toLocaleDateString(
+      "en-US",
+      { weekday: "short" },
+    );
+    const icon = dayIcons[dailyData.weather_code[i]] ?? "🌡️";
+    const max = isCelsius
+      ? Math.round(dailyData.temperature_2m_max[i])
+      : Math.round(celsiusChange(dailyData.temperature_2m_max[i]));
+    const min = isCelsius
+      ? Math.round(dailyData.temperature_2m_min[i])
+      : Math.round(celsiusChange(dailyData.temperature_2m_min[i]));
+    const unit = isCelsius ? "°C" : "°F";
+
+    const card = document.createElement("div");
+    card.className = "forecast-card";
+
+    const dayEl = document.createElement("div");
+    dayEl.className = "forecast-day";
+    dayEl.textContent = dayName;
+
+    const iconEl = document.createElement("div");
+    iconEl.className = "forecast-icon";
+    iconEl.textContent = icon;
+
+    const tempsEl = document.createElement("div");
+    tempsEl.className = "forecast-temps";
+    tempsEl.textContent = `${max}${unit} / ${min}${unit}`;
+
+    card.appendChild(dayEl);
+    card.appendChild(iconEl);
+    card.appendChild(tempsEl);
+    forecastEl.appendChild(card);
+  }
+}
+
+toggleButton.addEventListener("click", () => {
+  isCelsius = !isCelsius;
+  renderTemperature();
+  renderForecast();
+});
+
+inIt();
