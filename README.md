@@ -2,7 +2,8 @@
 
 A responsive weather app built with vanilla HTML, CSS, and JavaScript. Search any city to see the current weather and a 5-day forecast, or use your current location. No frameworks and no API key needed.
 
-<img width="853" height="440" alt="image" src="https://github.com/user-attachments/assets/faf4f5d3-8da4-4290-ae1d-a1bfdfda43c9" />
+ 
+![Uploading image.png…]()
 
 
 ✨ Features
